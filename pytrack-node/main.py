@@ -32,6 +32,52 @@ from network import LoRa
 state = 0
 time.sleep(2)
 gc.enable()
+pycom.heartbeat(False)
+zero = 0
+
+# Sets new state if any alarm on/off message is received
+# and sends position data each 5 minutes or 30 seconds depending on sleeptime
+
+def set_state(state, coord, s, msg, sleeptime):
+    print(msg.format(coord))
+    if coord[0] == None: 
+        coordx = zero.to_bytes(4, 'big')
+        coordy = zero.to_bytes(4, 'big')
+        valid = (0).to_bytes(1, 'big')
+        payload = coordx + coordy + valid
+        s.send(payload)
+
+    else:
+        coordx = math.floor(coord[0]*1000000).to_bytes(4, 'big')
+        coordy = math.floor(coord[1]*1000000).to_bytes(4, 'big')
+        valid = (1).to_bytes(1, 'big')
+        payload = coordx + coordy + valid
+        s.send(payload)
+    time.sleep(sleeptime) 
+    rx, port = s.recvfrom(256)
+
+    if rx:
+        data = rx.decode('utf-8')
+        print('Received: ', rx)
+        print("rx is 0x03: ", rx == b'\x03')
+        if rx == b'\x03': 
+            state = 1
+            return state
+
+        elif rx == b'\x00':
+            print("rx is 0x00: ", rx == b'\x00')
+            state = 0
+            return state
+
+    else:
+        return state
+
+def isMoving(coord, lockcoord):
+    if math.sqrt(pow(coord[0]-lockcoord[0],2) + pow(coord[1]-lockcoord[1],2)) > 0.0003:
+        return True
+    else: 
+        return False
+    
 
 # for EU868
 LORA_FREQUENCY = 868100000
@@ -71,22 +117,23 @@ s.setblocking(False)
 
 py = Pycoproc(Pycoproc.PYTRACK)
 l76 = L76GNSS(py, timeout=30)
-lockcoord = None
+lockcoord = (0,0)
+oldcoord = (0,0)
 time.sleep(5.0)
 
 # state machine -> UNLOCKED, LOCKING, LOCKED, DANGER
-    
+while(True):    
     if state == 1:
-        pycom.rgbled(0xFFFF00) # yellow
+        pycom.rgbled(0x00ff00) # green
         coord = l76.coordinates()
         lockcoord = coord
         state = 2
         state = set_state(state, coord, s, "Locking system at {}", 30)        
 
     elif state == 2:
-        pycom.rgbled(0xFF0F00) # orange
+        pycom.rgbled(0xffff00) # yellow
         coord = l76.coordinates()
-        if isMoving(coord, lockcoord):
+        if coord[0] == None: #isMoving(coord, lockcoord):
             state = 3
             state = set_state(state, coord, s, "Locked system is moving at {}", 30)
             
@@ -94,46 +141,11 @@ time.sleep(5.0)
             state = set_state(state, coord, s, "Locked system at {}", 300)
             
     elif state == 3:
-        pycom.rgbled(0xFF0000) # red
+        pycom.rgbled(0xff0000) # red
         coord = l76.coordinates()
         state = set_state(state, coord, s, "Locked system might be in danger at {}", 30)
 
     else:
-        pycom.rgbled(0x00FF00) # green
-        coord = l76.coordinates()        
+        pycom.rgbled(0x0000ff) # blue
+        coord = l76.coordinates()       
         state = set_state(state, coord, s, "System is Idle at {}", 300)
-
-# Sets new state if any alarm on/off message is received
-# and sends position data each 5 minutes or 30 seconds depending on sleeptime
-
-def set_state(state, coord, s, msg, sleeptime):
-    print(msg.format(coord))
-    if coord[0] == None: 
-        b = "NoSignal".encode('utf-8')
-        s.send(b)           
-
-    else :
-        b = str(coord[0]).encode('utf-8') + str(coord[1]).encode('utf-8')
-        s.send(b)
-    time.sleep(sleeptime) 
-    rx, port = s.recv(256)
-
-    if rx:
-        data = rx.decode('utf-8')
-        print('Received: ' data)
-        if data.lower() == "on": 
-            state = 1
-            return state
-
-        elif data.lower() == "off":
-            state = 0
-            return state
-
-    else
-        return state
-
-def isMoving(coord, lockcoord):
-    if sqrt(pow(coord[0]-lockcoord[0],2) + pow(coord[1]-lockcoord[1],2)) > 0.0003:
-        return True
-    else return False
-    

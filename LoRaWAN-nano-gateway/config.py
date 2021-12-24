@@ -24,7 +24,7 @@ NTP = "ch.pool.ntp.org"
 NTP_PERIOD_S = 3600
 
 WIFI_SSID = 'BNYnBNY'
-WIFI_PASS = '****************'
+WIFI_PASS = ''****************''
 
 # for EU868
 LORA_FREQUENCY = 868100000
